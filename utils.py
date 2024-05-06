@@ -124,6 +124,8 @@ def chat_completion_openai(model, messages, temperature, max_tokens, api_dict=No
         except KeyError:
             print(type(e), e)
             break
+        except Exception as e:
+            print(type(e), repr(e))
     
     return output
 

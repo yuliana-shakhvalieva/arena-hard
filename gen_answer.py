@@ -99,7 +99,7 @@ def get_answer(
 
     os.makedirs(os.path.dirname(answer_file), exist_ok=True)
     with open(answer_file, "a") as fout:
-        fout.write(json.dumps(ans) + "\n")
+        fout.write(json.dumps(ans, ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         assert model in endpoint_list
         endpoint_info = endpoint_list[model]
 
-        question_file = os.path.join("data", settings["bench_name"], "question.jsonl")
+        question_file = os.path.join("data", settings["bench_name"], settings["question_file"])
         questions = load_questions(question_file)
 
         answer_file = os.path.join("data", settings["bench_name"], "model_answer", f"{model}.jsonl")

@@ -142,7 +142,7 @@ if __name__ == "__main__":
     if configs["regex_pattern"]:
         pattern = re.compile(configs["regex_pattern"])
 
-    question_file = os.path.join("data", configs["bench_name"], "question.jsonl")
+    question_file = os.path.join("data", configs["bench_name"], configs["question_file"])
     answer_dir = os.path.join("data", configs["bench_name"], "model_answer")
     ref_answer_dir = os.path.join("data", configs["bench_name"], "reference_answer")
 
