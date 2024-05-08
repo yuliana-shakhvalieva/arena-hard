@@ -24,6 +24,7 @@ from utils import (
     chat_completion_mistral,
     chat_completion_gemini,
     chat_completion_cohere,
+    chat_completion_yandex,
     reorg_answer_file,
     OPENAI_MODEL_LIST,
     temperature_config,
@@ -74,6 +75,14 @@ def get_answer(
                                                       api_dict=api_dict)
             elif api_type == "cohere":
                 output = chat_completion_cohere(model=endpoint_info["model_name"],
+                                                messages=conv,
+                                                temperature=temperature,
+                                                max_tokens=max_tokens)
+            elif api_type == "yandex":
+                for reply in conv:  # Rename key name for compatibility with yandex api
+                    reply["text"] = reply.pop("content")
+
+                output = chat_completion_yandex(model=endpoint_info["model_name"],
                                                 messages=conv,
                                                 temperature=temperature,
                                                 max_tokens=max_tokens)

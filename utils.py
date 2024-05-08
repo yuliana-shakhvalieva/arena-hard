@@ -4,12 +4,11 @@ import time
 import yaml
 import random
 
-from typing import Optional
 from glob import glob
 
 # API setting constants
 API_MAX_RETRY = 16
-API_RETRY_SLEEP = 10
+API_RETRY_SLEEP = 3
 API_ERROR_OUTPUT = "$ERROR$"
 
 
@@ -40,6 +39,10 @@ temperature_config = {
     "humanities": 0.1,
 }
 
+
+IAM_TOKEN = os.environ.get("IAM_TOKEN")
+FOLDER_ID = os.environ.get("FOLDER_ID")
+YANDEX_POST_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 def load_questions(question_file: str):
     """Load questions from a file."""
@@ -324,6 +327,53 @@ def chat_completion_cohere(model, messages, temperature, max_tokens):
             print(type(e), e)
             break
     
+    return output
+
+
+def chat_completion_yandex(model, messages, temperature, max_tokens, api_dict=None):
+    import requests
+
+    # The prompt.json content
+    data = {
+        "modelUri": f"gpt://{FOLDER_ID}/{model}/latest",
+        "completionOptions": {
+            "stream": False,
+            "temperature": temperature,
+            "maxTokens": max_tokens
+        },
+        "messages": messages
+    }
+
+    # Set up the headers
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {IAM_TOKEN}",
+        "x-folder-id": FOLDER_ID
+    }
+
+    output: str = API_ERROR_OUTPUT
+    for _ in range(API_MAX_RETRY):
+        try:
+            response = requests.post(YANDEX_POST_URL, headers=headers, json=data)
+
+            response.raise_for_status()
+            response_json = response.json()
+
+            output = response_json["result"]["alternatives"][0]["message"]["text"]
+
+            total_tokens = response_json["result"]["usage"]["totalTokens"]
+            prompt_tokens = response_json["result"]["usage"]["inputTextTokens"]
+            completion_tokens = response_json["result"]["usage"]["completionTokens"]
+
+            break
+        except requests.exceptions.HTTPError as http_err:
+            print(f"HTTP error occurred: {repr(http_err)}, code: {http_err.response.status_code}")
+            if http_err.response.status_code == 429:
+                print(f"Sleep for {API_RETRY_SLEEP} seconds...")
+                time.sleep(API_RETRY_SLEEP)
+        except Exception as e:
+            print(type(e), repr(e))
+
     return output
 
 
