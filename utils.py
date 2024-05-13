@@ -8,7 +8,7 @@ from glob import glob
 
 # API setting constants
 API_MAX_RETRY = 16
-API_RETRY_SLEEP = 3
+API_RETRY_SLEEP = 10
 API_ERROR_OUTPUT = "$ERROR$"
 
 
@@ -42,7 +42,10 @@ temperature_config = {
 
 IAM_TOKEN = os.environ.get("IAM_TOKEN")
 FOLDER_ID = os.environ.get("FOLDER_ID")
+GIGACHAT_TOKEN = os.environ.get("GIGACHAT_TOKEN")
+
 YANDEX_POST_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+SBER_POST_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 def load_questions(question_file: str):
     """Load questions from a file."""
@@ -365,12 +368,63 @@ def chat_completion_yandex(model, messages, temperature, max_tokens, api_dict=No
             prompt_tokens = response_json["result"]["usage"]["inputTextTokens"]
             completion_tokens = response_json["result"]["usage"]["completionTokens"]
 
+            time.sleep(1)
+
             break
         except requests.exceptions.HTTPError as http_err:
             print(f"HTTP error occurred: {repr(http_err)}, code: {http_err.response.status_code}")
             if http_err.response.status_code == 429:
                 print(f"Sleep for {API_RETRY_SLEEP} seconds...")
-                time.sleep(API_RETRY_SLEEP)
+            time.sleep(API_RETRY_SLEEP)
+        except Exception as e:
+            print(type(e), repr(e))
+
+    return output
+
+
+def chat_completion_sber(model, messages, temperature, max_tokens, api_dict=None):
+    import requests
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.01 if temperature == 0 else temperature,
+            "stream": False,
+            "max_tokens": max_tokens,
+        },
+        #ensure_ascii=False
+    )
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {GIGACHAT_TOKEN}'
+    }
+
+    output: str = API_ERROR_OUTPUT
+    for _ in range(API_MAX_RETRY):
+        try:
+            response = requests.request("POST", SBER_POST_URL, headers=headers, data=payload, verify=False)
+
+            response.raise_for_status()
+            response_json = response.json()
+
+            output = response_json["choices"][0]["message"]["content"]
+
+            # total_tokens = response_json["result"]["usage"]["totalTokens"]
+            # prompt_tokens = response_json["result"]["usage"]["inputTextTokens"]
+            # completion_tokens = response_json["result"]["usage"]["completionTokens"]
+
+            time.sleep(1)
+
+            break
+        except requests.exceptions.HTTPError as http_err:
+            print("Error", http_err)
+            print("TEXT", response.text)
+            print(f"HTTP error occurred: {repr(http_err)}, code: {http_err.response.status_code}")
+            if http_err.response.status_code == 429:
+                print(f"Sleep for {API_RETRY_SLEEP} seconds...")
+            time.sleep(API_RETRY_SLEEP)
         except Exception as e:
             print(type(e), repr(e))
 

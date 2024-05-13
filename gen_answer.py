@@ -25,6 +25,7 @@ from utils import (
     chat_completion_gemini,
     chat_completion_cohere,
     chat_completion_yandex,
+    chat_completion_sber,
     reorg_answer_file,
     OPENAI_MODEL_LIST,
     temperature_config,
@@ -83,6 +84,11 @@ def get_answer(
                     reply["text"] = reply.pop("content")
 
                 output = chat_completion_yandex(model=endpoint_info["model_name"],
+                                                messages=conv,
+                                                temperature=temperature,
+                                                max_tokens=max_tokens)
+            elif api_type == "sber":
+                output = chat_completion_sber(model=endpoint_info["model_name"],
                                                 messages=conv,
                                                 temperature=temperature,
                                                 max_tokens=max_tokens)
