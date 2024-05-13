@@ -176,7 +176,7 @@ if __name__ == "__main__":
         futures = []
         for model in models:
             count = 0
-            for question in questions:
+            for question in tqdm(questions, desc=f"Collecting tasks for {model}"):
                 question_id = question["question_id"]
 
                 kwargs = {}
