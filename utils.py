@@ -7,8 +7,11 @@ import random
 from glob import glob
 
 # API setting constants
-API_MAX_RETRY = 16
+API_MAX_RETRY = 2
 API_RETRY_SLEEP = 10
+REPETITION_OUTPUT = "$REPETITION$"
+REPETITION_ERROR_MESSAGE = ("Sorry! We've encountered an issue with repetitive patterns in your prompt. "
+                            "Please try again with a different prompt.")
 API_ERROR_OUTPUT = "$ERROR$"
 
 
@@ -125,7 +128,10 @@ def chat_completion_openai(model, messages, temperature, max_tokens, api_dict=No
             print(type(e), e)
             time.sleep(API_RETRY_SLEEP)
         except openai.BadRequestError as e:
-            print(messages)
+            if REPETITION_ERROR_MESSAGE in e.message:
+                output = REPETITION_OUTPUT
+                print(f"GOT REPETITION ERROR. Set output to: {REPETITION_OUTPUT}")
+                break
             print(type(e), e)
         except KeyError:
             print(type(e), e)

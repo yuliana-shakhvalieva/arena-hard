@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from sklearn.linear_model import LogisticRegression
 from collections import defaultdict
-from utils import load_model_answers
+from utils import load_model_answers, REPETITION_OUTPUT
 
 def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
     models = pd.concat([df["model_a"], df["model_b"]]).unique()
@@ -109,23 +109,29 @@ def get_win_rate_column(df, column, baseline="gpt-4-0314"):
     return win_rate_table[baseline].fillna(0.5).apply(lambda x: round(x * 100, 2))
 
 
-def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
+def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3, baseline_name="gpt-4-0314"):
     arena_hard_battles = pd.DataFrame()
     
     print("Turning judgment results into battles...")
 
     directory = f"data/arena-hard-v0.1/model_judgment/{judge_name}"
     assert os.path.exists(directory)
+
+    repetition_scores = {}
     for file in tqdm(glob(f"{directory}/*jsonl")):
         df = pd.read_json(file, lines=True)
 
+        current_repetitions = []
         for _, row in df.iterrows():
+            model_name = row["model"]
             # game 1
             output = {"question_id": row["question_id"],
-                    "model_a": "gpt-4-0314",
-                    "model_b": row["model"]}
+                    "model_a": baseline_name,
+                    "model_b": model_name}
 
             game = row["games"][0]
+
+            current_repetitions.append(REPETITION_OUTPUT in game["judgment"])
 
             weight = 1
             if game["score"] == "A=B":
@@ -149,8 +155,8 @@ def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
             if not first_game_only:
                 # game 2
                 output = {"question_id": row["question_id"],
-                        "model_a": "gpt-4-0314",
-                        "model_b": row["model"]}
+                        "model_a": baseline_name,
+                        "model_b": model_name}
 
                 game = row["games"][1]
 
@@ -172,8 +178,10 @@ def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
 
                 if weight:
                     arena_hard_battles = pd.concat([arena_hard_battles, pd.DataFrame([output] * weight)])
+
+        repetition_scores[model_name] = sum(current_repetitions) / len(current_repetitions)
     arena_hard_battles.to_json("data/arena_hard_battles.jsonl", lines=True, orient="records")
-    return arena_hard_battles
+    return arena_hard_battles, repetition_scores
 
 
 if __name__ == "__main__":
@@ -198,8 +206,10 @@ if __name__ == "__main__":
     if args.load_battles:
         assert os.path.exists("data/arena_hard_battles.jsonl")
         battles = pd.read_json("data/arena_hard_battles.jsonl", lines=True)
+        repetition_scores = None # TODO load from files
     else:
-        battles = get_battles_from_judgment(args.judge_name, args.first_game_only, args.weight)
+        battles, repetition_scores = get_battles_from_judgment(
+            args.judge_name, args.first_game_only, args.weight, baseline_name=args.baseline)
         
     bootstrap_online_elo = compute_mle_elo(battles)
 
@@ -232,6 +242,8 @@ if __name__ == "__main__":
 
         stats.at[i, "avg_tokens"] = int(length)
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
+
+        stats.at[i, "repetition"] = repetition_scores[model] if model in repetition_scores else 0
     
     if not args.show_elo:
         stats.sort_values(by="model", inplace=True)
@@ -246,7 +258,7 @@ if __name__ == "__main__":
     stats.sort_values(by="score", ascending=False, inplace=True)
     for _, row in stats.iterrows():
         interval = str((round(row['lower'] - row['score'], decimal), round(row['upper'] - row['score'], decimal)))
-        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | average #tokens: {int(row['avg_tokens'])}")
+        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | repetition: {round(row['repetition'] * 100, 1) : ^3}% | average #tokens: {int(row['avg_tokens'])}")
 
     if args.output:
         cur_date = datetime.datetime.now()
