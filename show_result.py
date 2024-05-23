@@ -15,6 +15,8 @@ from sklearn.linear_model import LogisticRegression
 from collections import defaultdict
 from utils import load_model_answers, REPETITION_OUTPUT
 
+RU_LANG_LABEL = "__label__rus_Cyrl"
+
 def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
     models = pd.concat([df["model_a"], df["model_b"]]).unique()
     models = pd.Series(np.arange(len(models)), index=models)
@@ -233,6 +235,7 @@ if __name__ == "__main__":
         stats.at[i, "lower"] = np.percentile(bootstrap_elo_lu[model], 2.5)
         stats.at[i, "upper"] = np.percentile(bootstrap_elo_lu[model], 97.5)
 
+        # Calculate mean token_len
         length = 0
         if model in model_answers:
             for _, row in model_answers[model].items():
@@ -241,6 +244,15 @@ if __name__ == "__main__":
             length /= len(model_answers[model])
 
         stats.at[i, "avg_tokens"] = int(length)
+
+        # Calculate mean number of russian answers
+        ru_answers = []
+        if model in model_answers:
+            for _, row in model_answers[model].items():
+                turn = row["choices"][0]["turns"][0]
+                ru_answers.append(turn["lang"] == RU_LANG_LABEL)
+        stats.at[i, "ru"] = sum(ru_answers) / len(ru_answers) if len(ru_answers) > 0 else 0
+
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
 
         stats.at[i, "repetition"] = repetition_scores[model] if model in repetition_scores else 0
@@ -258,7 +270,9 @@ if __name__ == "__main__":
     stats.sort_values(by="score", ascending=False, inplace=True)
     for _, row in stats.iterrows():
         interval = str((round(row['lower'] - row['score'], decimal), round(row['upper'] - row['score'], decimal)))
-        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | repetition: {round(row['repetition'] * 100, 1) : ^3}% | average #tokens: {int(row['avg_tokens'])}")
+        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | "
+              f"repetition: {round(row['repetition'] * 100, 1) : ^3}% | average #tokens: {int(row['avg_tokens']) : ^5} | "
+              f"ru: {round(row['ru'] * 100, 1)}%")
 
     if args.output:
         cur_date = datetime.datetime.now()

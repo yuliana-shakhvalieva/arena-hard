@@ -26,7 +26,7 @@ from utils import (
     chat_completion_cohere,
     chat_completion_yandex,
     chat_completion_sber,
-    reorg_answer_file,
+    detect_language,
     OPENAI_MODEL_LIST,
     temperature_config,
 )
@@ -193,4 +193,4 @@ if __name__ == "__main__":
             ):
                 future.result()
 
-        reorg_answer_file(answer_file)
+        detect_language(answer_file)

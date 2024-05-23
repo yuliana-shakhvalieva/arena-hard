@@ -6,6 +6,9 @@ import random
 
 from glob import glob
 
+import fasttext
+from huggingface_hub import hf_hub_download
+
 # API setting constants
 API_MAX_RETRY = 2
 API_RETRY_SLEEP = 10
@@ -449,3 +452,29 @@ def reorg_answer_file(answer_file):
     with open(answer_file, "w") as fout:
         for qid in qids:
             fout.write(answers[qid])
+
+
+def detect_language(answer_file: str, lang_detect_model="facebook/fasttext-language-identification"):
+    answers = {}
+    with open(answer_file, "r") as fin:
+        for l in fin:
+            l = json.loads(l)
+            qid = l["question_id"]
+            answers[qid] = l
+
+    model_path = hf_hub_download(repo_id=lang_detect_model, filename="model.bin")
+    model = fasttext.load_model(model_path)
+
+    for qid in answers.keys():
+        for i in range(len(answers[qid]["choices"])):
+            for j in range(len(answers[qid]["choices"][i]["turns"])):
+                text = answers[qid]["choices"][i]["turns"][j]["content"]
+
+                label, _ = model.predict(text.replace("\n", " "))
+
+                answers[qid]["choices"][i]["turns"][j]["lang"] = label[0]
+
+    qids = sorted(list(answers.keys()))
+    with open(answer_file, "w") as fout:
+        for qid in qids:
+            fout.write(json.dumps(answers[qid], ensure_ascii=False) + "\n")
