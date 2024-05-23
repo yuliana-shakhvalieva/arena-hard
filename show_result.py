@@ -17,7 +17,8 @@ from utils import load_model_answers, REPETITION_OUTPUT
 
 RU_LANG_LABEL = "__label__rus_Cyrl"
 
-def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
+
+def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000, baseline_name="gpt-4-0314"):
     models = pd.concat([df["model_a"], df["model_b"]]).unique()
     models = pd.Series(np.arange(len(models)), index=models)
 
@@ -45,16 +46,16 @@ def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
 
     elo_scores = SCALE * lr.coef_[0] + INIT_RATING
 
-    # set anchor as gpt-4-0314 = 1000
-    if "gpt-4-0314" in models.index:
-        elo_scores += 1000 - elo_scores[models["gpt-4-0314"]]
+    # set anchor as baseline_name = 1000
+    if baseline_name in models.index:
+        elo_scores += 1000 - elo_scores[models[baseline_name]]
     return pd.Series(elo_scores, index = models.index).sort_values(ascending=False)
 
 
-def get_bootstrap_result(battles, func_compute_elo, num_round):
+def get_bootstrap_result(battles, func_compute_elo, num_round, baseline_name="gpt-4-0314"):
     rows = []
     for i in tqdm(range(num_round), desc="bootstrap"):
-        rows.append(func_compute_elo(battles.sample(frac=1.0, replace=True)))
+        rows.append(func_compute_elo(battles.sample(frac=1.0, replace=True), baseline_name=baseline_name))
     df = pd.DataFrame(rows)
     return df[df.median().sort_values(ascending=False).index]
 
@@ -190,7 +191,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--bench-name", type=str, default="arena-hard-v0.1")
     parser.add_argument("--judge-name", type=str, default="gpt-4-1106-preview")
-    parser.add_argument("--baseline", type=str, default="gpt-4-0314")
+    parser.add_argument("--baseline", type=str, default="gpt-4-0613")
     parser.add_argument("--load-battles", action="store_true")
     parser.add_argument("--load-bootstrap", action="store_true")
     parser.add_argument("--show-elo", action="store_true")
@@ -213,7 +214,7 @@ if __name__ == "__main__":
         battles, repetition_scores = get_battles_from_judgment(
             args.judge_name, args.first_game_only, args.weight, baseline_name=args.baseline)
         
-    bootstrap_online_elo = compute_mle_elo(battles)
+    bootstrap_online_elo = compute_mle_elo(battles, baseline_name=args.baseline)
 
 
     if args.load_bootstrap:
