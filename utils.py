@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 import yaml
 import random
@@ -16,6 +17,7 @@ REPETITION_OUTPUT = "$REPETITION$"
 REPETITION_ERROR_MESSAGE = ("Sorry! We've encountered an issue with repetitive patterns in your prompt. "
                             "Please try again with a different prompt.")
 API_ERROR_OUTPUT = "$ERROR$"
+CODE_SNIPPET_PATTERN = re.compile("```[^\S\r\n]*[a-z]*\n.*?\n```", re.DOTALL)
 
 
 OPENAI_MODEL_LIST = (
@@ -469,8 +471,10 @@ def detect_language(answer_file: str, lang_detect_model="facebook/fasttext-langu
         for i in range(len(answers[qid]["choices"])):
             for j in range(len(answers[qid]["choices"][i]["turns"])):
                 text = answers[qid]["choices"][i]["turns"][j]["content"]
+                text = re.sub(CODE_SNIPPET_PATTERN, "", text)
+                text = text.replace("\n", " ")
 
-                label, _ = model.predict(text.replace("\n", " "))
+                label, _ = model.predict(text)
 
                 answers[qid]["choices"][i]["turns"][j]["lang"] = label[0]
 
