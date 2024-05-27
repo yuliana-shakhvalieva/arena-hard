@@ -254,9 +254,17 @@ if __name__ == "__main__":
                 ru_answers.append(turn["lang"] == RU_LANG_LABEL)
         stats.at[i, "ru"] = sum(ru_answers) / len(ru_answers) if len(ru_answers) > 0 else 0
 
+        # Calculate mean number of repetitions
+        repetitions = []
+        if model in model_answers:
+            for _, row in model_answers[model].items():
+                turn = row["choices"][0]["turns"][0]
+                repetitions.append(turn["repetition"])
+        stats.at[i, "repetitions"] = sum(repetitions) / len(repetitions) if len(repetitions) > 0 else 0
+
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
 
-        stats.at[i, "repetition"] = repetition_scores[model] if model in repetition_scores else 0
+        stats.at[i, "repetition_openai"] = repetition_scores[model] if model in repetition_scores else 0
     
     if not args.show_elo:
         stats.sort_values(by="model", inplace=True)
@@ -272,7 +280,9 @@ if __name__ == "__main__":
     for _, row in stats.iterrows():
         interval = str((round(row['lower'] - row['score'], decimal), round(row['upper'] - row['score'], decimal)))
         print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | "
-              f"repetition: {round(row['repetition'] * 100, 1) : ^3}% | average #tokens: {int(row['avg_tokens']) : ^5} | "
+              f"repetition_openai: {round(row['repetition_openai'] * 100, 1) : ^3}% | "
+              f"repetitions: {round(row['repetitions'] * 100, 1) : ^3}% | "
+              f"average #tokens: {int(row['avg_tokens']) : ^5} | "
               f"ru: {round(row['ru'] * 100, 1)}%")
 
     if args.output:

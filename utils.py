@@ -482,3 +482,31 @@ def detect_language(answer_file: str, lang_detect_model="facebook/fasttext-langu
     with open(answer_file, "w") as fout:
         for qid in qids:
             fout.write(json.dumps(answers[qid], ensure_ascii=False) + "\n")
+
+
+def check_for_repetition(text: str, min_size: int = 20, repetition_rate: int = 10) -> bool:
+    for end_pos in range(len(text) - min_size, len(text) - len(text) // repetition_rate, -1):
+        if text.count(text[end_pos:]) > repetition_rate:
+            return True
+    return False
+
+
+def detect_repetitions(answer_file: str):
+    answers = {}
+    with open(answer_file, "r") as fin:
+        for l in fin:
+            l = json.loads(l)
+            qid = l["question_id"]
+            answers[qid] = l
+
+    for qid in answers.keys():
+        for i in range(len(answers[qid]["choices"])):
+            for j in range(len(answers[qid]["choices"][i]["turns"])):
+                text = answers[qid]["choices"][i]["turns"][j]["content"]
+
+                answers[qid]["choices"][i]["turns"][j]["repetition"] = check_for_repetition(text)
+
+    qids = sorted(list(answers.keys()))
+    with open(answer_file, "w") as fout:
+        for qid in qids:
+            fout.write(json.dumps(answers[qid], ensure_ascii=False) + "\n")
