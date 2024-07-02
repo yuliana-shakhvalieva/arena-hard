@@ -13,9 +13,12 @@ from tqdm import tqdm
 
 from sklearn.linear_model import LogisticRegression
 from collections import defaultdict
-from utils import load_model_answers
+from utils import load_model_answers, REPETITION_OUTPUT
 
-def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
+RU_LANG_LABEL = "__label__rus_Cyrl"
+
+
+def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000, baseline_name="gpt-4-0314"):
     models = pd.concat([df["model_a"], df["model_b"]]).unique()
     models = pd.Series(np.arange(len(models)), index=models)
 
@@ -43,16 +46,16 @@ def compute_mle_elo(df, SCALE=400, BASE=10, INIT_RATING=1000):
 
     elo_scores = SCALE * lr.coef_[0] + INIT_RATING
 
-    # set anchor as gpt-4-0314 = 1000
-    if "gpt-4-0314" in models.index:
-        elo_scores += 1000 - elo_scores[models["gpt-4-0314"]]
+    # set anchor as baseline_name = 1000
+    if baseline_name in models.index:
+        elo_scores += 1000 - elo_scores[models[baseline_name]]
     return pd.Series(elo_scores, index = models.index).sort_values(ascending=False)
 
 
-def get_bootstrap_result(battles, func_compute_elo, num_round):
+def get_bootstrap_result(battles, func_compute_elo, num_round, baseline_name="gpt-4-0314"):
     rows = []
     for i in tqdm(range(num_round), desc="bootstrap"):
-        rows.append(func_compute_elo(battles.sample(frac=1.0, replace=True)))
+        rows.append(func_compute_elo(battles.sample(frac=1.0, replace=True), baseline_name=baseline_name))
     df = pd.DataFrame(rows)
     return df[df.median().sort_values(ascending=False).index]
 
@@ -109,23 +112,29 @@ def get_win_rate_column(df, column, baseline="gpt-4-0314"):
     return win_rate_table[baseline].fillna(0.5).apply(lambda x: round(x * 100, 2))
 
 
-def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
+def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3, baseline_name="gpt-4-0314"):
     arena_hard_battles = pd.DataFrame()
     
     print("Turning judgment results into battles...")
 
     directory = f"data/arena-hard-v0.1/model_judgment/{judge_name}"
     assert os.path.exists(directory)
+
+    repetition_scores = {}
     for file in tqdm(glob(f"{directory}/*jsonl")):
         df = pd.read_json(file, lines=True)
 
+        current_repetitions = []
         for _, row in df.iterrows():
+            model_name = row["model"]
             # game 1
             output = {"question_id": row["question_id"],
-                    "model_a": "gpt-4-0314",
-                    "model_b": row["model"]}
+                    "model_a": baseline_name,
+                    "model_b": model_name}
 
             game = row["games"][0]
+
+            current_repetitions.append(REPETITION_OUTPUT in game["judgment"])
 
             weight = 1
             if game["score"] == "A=B":
@@ -149,8 +158,8 @@ def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
             if not first_game_only:
                 # game 2
                 output = {"question_id": row["question_id"],
-                        "model_a": "gpt-4-0314",
-                        "model_b": row["model"]}
+                        "model_a": baseline_name,
+                        "model_b": model_name}
 
                 game = row["games"][1]
 
@@ -172,15 +181,17 @@ def get_battles_from_judgment(judge_name, first_game_only=False, WEIGHT=3):
 
                 if weight:
                     arena_hard_battles = pd.concat([arena_hard_battles, pd.DataFrame([output] * weight)])
+
+        repetition_scores[model_name] = sum(current_repetitions) / len(current_repetitions)
     arena_hard_battles.to_json("data/arena_hard_battles.jsonl", lines=True, orient="records")
-    return arena_hard_battles
+    return arena_hard_battles, repetition_scores
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--bench-name", type=str, default="arena-hard-v0.1")
     parser.add_argument("--judge-name", type=str, default="gpt-4-1106-preview")
-    parser.add_argument("--baseline", type=str, default="gpt-4-0314")
+    parser.add_argument("--baseline", type=str, default="gpt-4-0613")
     parser.add_argument("--load-battles", action="store_true")
     parser.add_argument("--load-bootstrap", action="store_true")
     parser.add_argument("--show-elo", action="store_true")
@@ -198,10 +209,12 @@ if __name__ == "__main__":
     if args.load_battles:
         assert os.path.exists("data/arena_hard_battles.jsonl")
         battles = pd.read_json("data/arena_hard_battles.jsonl", lines=True)
+        repetition_scores = None # TODO load from files
     else:
-        battles = get_battles_from_judgment(args.judge_name, args.first_game_only, args.weight)
+        battles, repetition_scores = get_battles_from_judgment(
+            args.judge_name, args.first_game_only, args.weight, baseline_name=args.baseline)
         
-    bootstrap_online_elo = compute_mle_elo(battles)
+    bootstrap_online_elo = compute_mle_elo(battles, baseline_name=args.baseline)
 
 
     if args.load_bootstrap:
@@ -223,6 +236,7 @@ if __name__ == "__main__":
         stats.at[i, "lower"] = np.percentile(bootstrap_elo_lu[model], 2.5)
         stats.at[i, "upper"] = np.percentile(bootstrap_elo_lu[model], 97.5)
 
+        # Calculate mean token_len
         length = 0
         if model in model_answers:
             for _, row in model_answers[model].items():
@@ -231,7 +245,26 @@ if __name__ == "__main__":
             length /= len(model_answers[model])
 
         stats.at[i, "avg_tokens"] = int(length)
+
+        # Calculate mean number of russian answers
+        ru_answers = []
+        if model in model_answers:
+            for _, row in model_answers[model].items():
+                turn = row["choices"][0]["turns"][0]
+                ru_answers.append(turn["lang"] == RU_LANG_LABEL)
+        stats.at[i, "ru"] = sum(ru_answers) / len(ru_answers) if len(ru_answers) > 0 else 0
+
+        # Calculate mean number of repetitions
+        repetitions = []
+        if model in model_answers:
+            for _, row in model_answers[model].items():
+                turn = row["choices"][0]["turns"][0]
+                repetitions.append(turn["repetition"])
+        stats.at[i, "repetitions"] = sum(repetitions) / len(repetitions) if len(repetitions) > 0 else 0
+
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
+
+        stats.at[i, "repetition_openai"] = repetition_scores[model] if model in repetition_scores else 0
     
     if not args.show_elo:
         stats.sort_values(by="model", inplace=True)
@@ -246,7 +279,11 @@ if __name__ == "__main__":
     stats.sort_values(by="score", ascending=False, inplace=True)
     for _, row in stats.iterrows():
         interval = str((round(row['lower'] - row['score'], decimal), round(row['upper'] - row['score'], decimal)))
-        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | average #tokens: {int(row['avg_tokens'])}")
+        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | "
+              f"repetition_openai: {round(row['repetition_openai'] * 100, 1) : ^3}% | "
+              f"repetitions: {round(row['repetitions'] * 100, 1) : ^3}% | "
+              f"average #tokens: {int(row['avg_tokens']) : ^5} | "
+              f"ru: {round(row['ru'] * 100, 1)}%")
 
     if args.output:
         cur_date = datetime.datetime.now()

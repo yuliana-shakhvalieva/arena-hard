@@ -1,16 +1,23 @@
 import os
 import json
+import re
 import time
 import yaml
 import random
 
-from typing import Optional
 from glob import glob
 
+import fasttext
+from huggingface_hub import hf_hub_download
+
 # API setting constants
-API_MAX_RETRY = 16
+API_MAX_RETRY = 2
 API_RETRY_SLEEP = 10
+REPETITION_OUTPUT = "$REPETITION$"
+REPETITION_ERROR_MESSAGE = ("Sorry! We've encountered an issue with repetitive patterns in your prompt. "
+                            "Please try again with a different prompt.")
 API_ERROR_OUTPUT = "$ERROR$"
+CODE_SNIPPET_PATTERN = re.compile("```[^\S\r\n]*[a-z]*\n.*?\n```", re.DOTALL)
 
 
 OPENAI_MODEL_LIST = (
@@ -40,6 +47,13 @@ temperature_config = {
     "humanities": 0.1,
 }
 
+
+IAM_TOKEN = os.environ.get("IAM_TOKEN")
+FOLDER_ID = os.environ.get("FOLDER_ID")
+GIGACHAT_TOKEN = os.environ.get("GIGACHAT_TOKEN")
+
+YANDEX_POST_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+SBER_POST_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 def load_questions(question_file: str):
     """Load questions from a file."""
@@ -119,11 +133,16 @@ def chat_completion_openai(model, messages, temperature, max_tokens, api_dict=No
             print(type(e), e)
             time.sleep(API_RETRY_SLEEP)
         except openai.BadRequestError as e:
-            print(messages)
+            if REPETITION_ERROR_MESSAGE in e.message:
+                output = REPETITION_OUTPUT
+                print(f"GOT REPETITION ERROR. Set output to: {REPETITION_OUTPUT}")
+                break
             print(type(e), e)
         except KeyError:
             print(type(e), e)
             break
+        except Exception as e:
+            print(type(e), repr(e))
     
     return output
 
@@ -325,6 +344,104 @@ def chat_completion_cohere(model, messages, temperature, max_tokens):
     return output
 
 
+def chat_completion_yandex(model, messages, temperature, max_tokens, api_dict=None):
+    import requests
+
+    # The prompt.json content
+    data = {
+        "modelUri": f"gpt://{FOLDER_ID}/{model}/latest",
+        "completionOptions": {
+            "stream": False,
+            "temperature": temperature,
+            "maxTokens": max_tokens
+        },
+        "messages": messages
+    }
+
+    # Set up the headers
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {IAM_TOKEN}",
+        "x-folder-id": FOLDER_ID
+    }
+
+    output: str = API_ERROR_OUTPUT
+    for _ in range(API_MAX_RETRY):
+        try:
+            response = requests.post(YANDEX_POST_URL, headers=headers, json=data)
+
+            response.raise_for_status()
+            response_json = response.json()
+
+            output = response_json["result"]["alternatives"][0]["message"]["text"]
+
+            total_tokens = response_json["result"]["usage"]["totalTokens"]
+            prompt_tokens = response_json["result"]["usage"]["inputTextTokens"]
+            completion_tokens = response_json["result"]["usage"]["completionTokens"]
+
+            time.sleep(1)
+
+            break
+        except requests.exceptions.HTTPError as http_err:
+            print(f"HTTP error occurred: {repr(http_err)}, code: {http_err.response.status_code}")
+            if http_err.response.status_code == 429:
+                print(f"Sleep for {API_RETRY_SLEEP} seconds...")
+            time.sleep(API_RETRY_SLEEP)
+        except Exception as e:
+            print(type(e), repr(e))
+
+    return output
+
+
+def chat_completion_sber(model, messages, temperature, max_tokens, api_dict=None):
+    import requests
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.01 if temperature == 0 else temperature,
+            "stream": False,
+            "max_tokens": max_tokens,
+        },
+        #ensure_ascii=False
+    )
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {GIGACHAT_TOKEN}'
+    }
+
+    output: str = API_ERROR_OUTPUT
+    for _ in range(API_MAX_RETRY):
+        try:
+            response = requests.request("POST", SBER_POST_URL, headers=headers, data=payload, verify=False)
+
+            response.raise_for_status()
+            response_json = response.json()
+
+            output = response_json["choices"][0]["message"]["content"]
+
+            # total_tokens = response_json["result"]["usage"]["totalTokens"]
+            # prompt_tokens = response_json["result"]["usage"]["inputTextTokens"]
+            # completion_tokens = response_json["result"]["usage"]["completionTokens"]
+
+            time.sleep(1)
+
+            break
+        except requests.exceptions.HTTPError as http_err:
+            print("Error", http_err)
+            print("TEXT", response.text)
+            print(f"HTTP error occurred: {repr(http_err)}, code: {http_err.response.status_code}")
+            if http_err.response.status_code == 429:
+                print(f"Sleep for {API_RETRY_SLEEP} seconds...")
+            time.sleep(API_RETRY_SLEEP)
+        except Exception as e:
+            print(type(e), repr(e))
+
+    return output
+
+
 def reorg_answer_file(answer_file):
     """Sort by question id and de-duplication"""
     answers = {}
@@ -337,3 +454,59 @@ def reorg_answer_file(answer_file):
     with open(answer_file, "w") as fout:
         for qid in qids:
             fout.write(answers[qid])
+
+
+def detect_language(answer_file: str, lang_detect_model="facebook/fasttext-language-identification"):
+    answers = {}
+    with open(answer_file, "r") as fin:
+        for l in fin:
+            l = json.loads(l)
+            qid = l["question_id"]
+            answers[qid] = l
+
+    model_path = hf_hub_download(repo_id=lang_detect_model, filename="model.bin")
+    model = fasttext.load_model(model_path)
+
+    for qid in answers.keys():
+        for i in range(len(answers[qid]["choices"])):
+            for j in range(len(answers[qid]["choices"][i]["turns"])):
+                text = answers[qid]["choices"][i]["turns"][j]["content"]
+                text = re.sub(CODE_SNIPPET_PATTERN, "", text)
+                text = text.replace("\n", " ")
+
+                label, _ = model.predict(text)
+
+                answers[qid]["choices"][i]["turns"][j]["lang"] = label[0]
+
+    qids = sorted(list(answers.keys()))
+    with open(answer_file, "w") as fout:
+        for qid in qids:
+            fout.write(json.dumps(answers[qid], ensure_ascii=False) + "\n")
+
+
+def check_for_repetition(text: str, min_size: int = 20, repetition_rate: int = 10) -> bool:
+    for end_pos in range(len(text) - min_size, len(text) - len(text) // repetition_rate, -1):
+        if text.count(text[end_pos:]) > repetition_rate:
+            return True
+    return False
+
+
+def detect_repetitions(answer_file: str):
+    answers = {}
+    with open(answer_file, "r") as fin:
+        for l in fin:
+            l = json.loads(l)
+            qid = l["question_id"]
+            answers[qid] = l
+
+    for qid in answers.keys():
+        for i in range(len(answers[qid]["choices"])):
+            for j in range(len(answers[qid]["choices"][i]["turns"])):
+                text = answers[qid]["choices"][i]["turns"][j]["content"]
+
+                answers[qid]["choices"][i]["turns"][j]["repetition"] = check_for_repetition(text)
+
+    qids = sorted(list(answers.keys()))
+    with open(answer_file, "w") as fout:
+        for qid in qids:
+            fout.write(json.dumps(answers[qid], ensure_ascii=False) + "\n")

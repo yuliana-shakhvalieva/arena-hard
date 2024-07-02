@@ -142,7 +142,7 @@ if __name__ == "__main__":
     if configs["regex_pattern"]:
         pattern = re.compile(configs["regex_pattern"])
 
-    question_file = os.path.join("data", configs["bench_name"], "question.jsonl")
+    question_file = os.path.join("data", configs["bench_name"], configs["question_file"])
     answer_dir = os.path.join("data", configs["bench_name"], "model_answer")
     ref_answer_dir = os.path.join("data", configs["bench_name"], "reference_answer")
 
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         futures = []
         for model in models:
             count = 0
-            for question in questions:
+            for question in tqdm(questions, desc=f"Collecting tasks for {model}"):
                 question_id = question["question_id"]
 
                 kwargs = {}

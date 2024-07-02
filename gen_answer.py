@@ -24,7 +24,9 @@ from utils import (
     chat_completion_mistral,
     chat_completion_gemini,
     chat_completion_cohere,
-    reorg_answer_file,
+    chat_completion_yandex,
+    chat_completion_sber,
+    detect_language,
     OPENAI_MODEL_LIST,
     temperature_config,
 )
@@ -77,6 +79,19 @@ def get_answer(
                                                 messages=conv,
                                                 temperature=temperature,
                                                 max_tokens=max_tokens)
+            elif api_type == "yandex":
+                for reply in conv:  # Rename key name for compatibility with yandex api
+                    reply["text"] = reply.pop("content")
+
+                output = chat_completion_yandex(model=endpoint_info["model_name"],
+                                                messages=conv,
+                                                temperature=temperature,
+                                                max_tokens=max_tokens)
+            elif api_type == "sber":
+                output = chat_completion_sber(model=endpoint_info["model_name"],
+                                                messages=conv,
+                                                temperature=temperature,
+                                                max_tokens=max_tokens)
             else:
                 output = chat_completion_openai(model=endpoint_info["model_name"], 
                                                 messages=conv, 
@@ -99,7 +114,7 @@ def get_answer(
 
     os.makedirs(os.path.dirname(answer_file), exist_ok=True)
     with open(answer_file, "a") as fout:
-        fout.write(json.dumps(ans) + "\n")
+        fout.write(json.dumps(ans, ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":
@@ -123,7 +138,7 @@ if __name__ == "__main__":
         assert model in endpoint_list
         endpoint_info = endpoint_list[model]
 
-        question_file = os.path.join("data", settings["bench_name"], "question.jsonl")
+        question_file = os.path.join("data", settings["bench_name"], settings["question_file"])
         questions = load_questions(question_file)
 
         answer_file = os.path.join("data", settings["bench_name"], "model_answer", f"{model}.jsonl")
@@ -178,4 +193,4 @@ if __name__ == "__main__":
             ):
                 future.result()
 
-        reorg_answer_file(answer_file)
+        detect_language(answer_file)
