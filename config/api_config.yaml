@@ -26,8 +26,8 @@ gpt-4-0125-preview:
     api_type: openai
     parallel: 50
 
-deepvk/Socrates-7b-dpo:
-    model_name: deepvk/Socrates-7b-dpo
+deepvk/gemma-2b-sft:
+    model_name: deepvk/gemma-2b-sft
     endpoints:
         - api_base: http://localhost:8000/v1
           api_key: default-token
