@@ -33,7 +33,7 @@ def get_score(judgment, pattern, pairwise=True):
 
 
 # get answer from model
-def get_answer(model, conv, temperature, max_tokens, endpoint_dict=None):
+def get_answer(model, conv, temperature, max_tokens, endpoint_dict=None) -> (str, int, int):
     api_dict = get_endpoint(endpoint_dict["endpoints"])
 
     if endpoint_dict["api_type"] == "anthropic":
@@ -41,8 +41,10 @@ def get_answer(model, conv, temperature, max_tokens, endpoint_dict=None):
     elif endpoint_dict["api_type"] == "azure":
         output = chat_completion_openai_azure(model, conv, temperature, max_tokens, api_dict)
     else:
-        output = chat_completion_openai(model, conv, temperature, max_tokens, api_dict)
-    return output
+        output, prompt_tokens, completion_tokens = chat_completion_openai(
+            model, conv, temperature, max_tokens, api_dict)
+
+    return output, prompt_tokens, completion_tokens
 
 
 def judgment(**args):
@@ -96,7 +98,7 @@ def judgment(**args):
 
         judgment = ""
         for _ in range(2):
-            new_judgment = get_answer(
+            new_judgment, prompt_tokens, completion_tokens = get_answer(
                 model,
                 conv,
                 configs["temperature"],
@@ -118,7 +120,9 @@ def judgment(**args):
         result = {
             "user_prompt": conv[1]["content"],
             "judgment": judgment,
-            "score":score
+            "score": score,
+            "completion_tokens": completion_tokens,
+            "prompt_tokens": prompt_tokens,
         }
         output["games"].append(result)
 
