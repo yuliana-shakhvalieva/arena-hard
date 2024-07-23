@@ -26,7 +26,7 @@ gpt-4-0125-preview:
     api_type: openai
     parallel: 50
 
-deepvk/gemma-2b-sft:
+deepvk-gemma-2b-sft:
     model_name: deepvk/gemma-2b-sft
     endpoints:
         - api_base: http://ml4-6:8888/v1
