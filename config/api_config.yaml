@@ -32,6 +32,12 @@ gpt-4o:
     api_type: openai
     parallel: 250
 
+gpt-4o-mini:
+    model_name: gpt-4o-mini
+    endpoints: null
+    api_type: openai
+    parallel: 250
+
 deepvk-gemma-2b-sft:
     model_name: deepvk/gemma-2b-sft
     endpoints:
