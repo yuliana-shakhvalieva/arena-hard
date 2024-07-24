@@ -275,17 +275,26 @@ if __name__ == "__main__":
     else:
         decimal = 0
         stats = stats.astype({"score" : int, "lower" : int, "upper" : int})
-    
+
+    stats["repetition_openai"] = stats["repetition_openai"].apply(lambda x: f"{round(x * 100, 1)}%")
+    stats["repetitions"] = stats["repetitions"].apply(lambda x: f"{round(x * 100, 1)}%")
+    stats["ru"] = stats["ru"].apply(lambda x: f"{round(x * 100, 1)}%")
+    stats["interval"] = stats.apply(
+        lambda x: str((round(x['lower'] - x['score'], decimal), round(x['upper'] - x['score'], decimal))),
+        axis=1
+    )
+
     stats.sort_values(by="score", ascending=False, inplace=True)
     for _, row in stats.iterrows():
-        interval = str((round(row['lower'] - row['score'], decimal), round(row['upper'] - row['score'], decimal)))
-        print(f"{row['model'] : <30} | score: {round(row['score'], decimal) : ^5} | 95% CI: {interval : ^12} | "
-              f"repetition_openai: {round(row['repetition_openai'] * 100, 1) : ^3}% | "
-              f"repetitions: {round(row['repetitions'] * 100, 1) : ^3}% | "
+        print(f"{row['model'] : <50} | score: {round(row['score'], decimal) : ^5} | 95% CI: {row['interval'] : ^12} | "
+              f"repetition_openai: {row['repetition_openai'] : ^5} | "
+              f"repetitions: {row['repetitions'] : ^5} | "
               f"average #tokens: {int(row['avg_tokens']) : ^5} | "
-              f"ru: {round(row['ru'] * 100, 1)}%")
+              f"ru: {row['ru']}")
 
+    stats = stats.drop(columns=["results"])
     if args.output:
         cur_date = datetime.datetime.now()
         date_str = cur_date.strftime("%Y%m%d")
-        stats.to_json(f"arena_hard_leaderboard_{date_str}.json", orient="records", indent=4)
+        stats.to_json(f"data/arena-hard-v0.1/_leaderboard_{date_str}.json", orient="records", indent=4)
+        stats.to_csv(f"data/arena-hard-v0.1/arena_hard_leaderboard_{date_str}.csv", index=False)
