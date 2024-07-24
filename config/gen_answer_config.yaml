@@ -10,5 +10,5 @@ question_file: question_ru.jsonl
 
 # a list of model to generate answers
 model_list:
-   gpt-4-0613
-   gpt-4o
+   - gpt-4-0613
+   - gpt-4o
