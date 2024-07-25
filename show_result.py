@@ -268,8 +268,10 @@ if __name__ == "__main__":
         errors = []
         if model in model_answers:
             for _, row in model_answers[model].items():
+                if row["question_id"] == "a88b57df8da345339834abec35b574cc":
+                    a=0
                 turn = row["choices"][0]["turns"][0]
-                errors.append(utils.API_ERROR_OUTPUT in ["content"])
+                errors.append(utils.API_ERROR_OUTPUT in turn["content"])
         stats.at[i, "errors"] = sum(errors) / len(errors) if len(errors) > 0 else 0
 
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
