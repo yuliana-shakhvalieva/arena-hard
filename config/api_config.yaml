@@ -42,6 +42,6 @@ deepvk-russol-7b-sft:
     model_name: deepvk/russol-7b-sft
     endpoints:
         - api_base: http://ml4-6:8880/v1
-        - api_key: default-token
+          api_key: default-token
     api_type: openai
     parallel: 1
