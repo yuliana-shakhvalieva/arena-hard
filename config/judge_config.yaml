@@ -23,4 +23,4 @@ prompt_template: ["<|User Prompt|>\n{question_1}\n\n<|The Start of Assistant A's
 question_file: "question_ru.jsonl"
 # Add your model below for evaluation
 model_list:
-  - russol-7b-sft
+  - deepvk-russol-7b-sft
