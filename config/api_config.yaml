@@ -45,3 +45,31 @@ deepvk-russol-7b-sft:
           api_key: default-token
     api_type: openai
     parallel: 1
+
+yandexgpt-pro-28-05-24:
+    model_name: yandexgpt
+    system_prompt: "Ты полезный AI-ассистент."
+    endpoints: null
+    api_type: yandex
+    parallel: 1
+
+yandexgpt-lite-08-05-24:
+    model_name: yandexgpt-lite
+    system_prompt: "Ты полезный AI-ассистент."
+    endpoints: null
+    api_type: yandex
+    parallel: 1
+
+GigaChat-25-07-24:
+    model_name: GigaChat
+    system_prompt: "Ты полезный AI-ассистент."
+    endpoints: null
+    api_type: sber
+    parallel: 10
+
+GigaChat-Pro-13-05-24:
+    model_name: GigaChat-Pro
+    system_prompt: "Ты полезный AI-ассистент."
+    endpoints: null
+    api_type: sber
+    parallel: 10
