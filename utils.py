@@ -365,8 +365,7 @@ def chat_completion_yandex(model, messages, temperature, max_tokens, api_dict=No
     # Set up the headers
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {IAM_TOKEN}",
-        "x-folder-id": FOLDER_ID
+        "Authorization": f"Api-Key {IAM_TOKEN}",
     }
 
     output: str = API_ERROR_OUTPUT
