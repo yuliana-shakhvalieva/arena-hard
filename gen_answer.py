@@ -13,6 +13,7 @@ import tiktoken
 import shortuuid
 import tqdm
 
+import utils
 from utils import (
     load_questions,
     load_model_answers,
@@ -160,7 +161,9 @@ if __name__ == "__main__":
             futures = []
             count = 0
             for index, question in enumerate(questions):
-                if model in existing_answer and question["question_id"] in existing_answer[model]:
+                if model in existing_answer and question["question_id"] in existing_answer[model] \
+                        and utils.API_ERROR_OUTPUT not in \
+                        existing_answer[model][question["question_id"]]['choices'][0]['turns'][0]['content']:
                     count += 1
                     continue
                 future = executor.submit(
