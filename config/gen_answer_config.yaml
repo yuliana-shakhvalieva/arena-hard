@@ -6,7 +6,7 @@ temperature: 0.0
 max_tokens: 4096
 num_choices: 1
 
-question_file: question_ru.jsonl
+question_file: "question_ru.jsonl"
 
 # a list of model to generate answers
 model_list:
