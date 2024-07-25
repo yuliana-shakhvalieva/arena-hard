@@ -13,6 +13,8 @@ from tqdm import tqdm
 
 from sklearn.linear_model import LogisticRegression
 from collections import defaultdict
+
+import utils
 from utils import load_model_answers, REPETITION_OUTPUT
 
 RU_LANG_LABEL = "__label__rus_Cyrl"
@@ -262,6 +264,14 @@ if __name__ == "__main__":
                 repetitions.append(turn["repetition"])
         stats.at[i, "repetitions"] = sum(repetitions) / len(repetitions) if len(repetitions) > 0 else 0
 
+        # Calculate mean number of api errors
+        errors = []
+        if model in model_answers:
+            for _, row in model_answers[model].items():
+                turn = row["choices"][0]["turns"][0]
+                errors.append(utils.API_ERROR_OUTPUT in turn["content"])
+        stats.at[i, "errors"] = sum(errors) / len(errors) if len(errors) > 0 else 0
+
         stats.at[i, "results"] = bootstrap_elo_lu[model].tolist()
 
         stats.at[i, "repetition_openai"] = repetition_scores[model] if model in repetition_scores else 0
@@ -278,6 +288,7 @@ if __name__ == "__main__":
 
     stats["repetition_openai"] = stats["repetition_openai"].apply(lambda x: f"{round(x * 100, 1)}%")
     stats["repetitions"] = stats["repetitions"].apply(lambda x: f"{round(x * 100, 1)}%")
+    stats["errors"] = stats["errors"].apply(lambda x: f"{round(x * 100, 1)}%")
     stats["ru"] = stats["ru"].apply(lambda x: f"{round(x * 100, 1)}%")
     stats["interval"] = stats.apply(
         lambda x: str((round(x['lower'] - x['score'], decimal), round(x['upper'] - x['score'], decimal))),
@@ -289,6 +300,7 @@ if __name__ == "__main__":
         print(f"{row['model'] : <50} | score: {round(row['score'], decimal) : ^5} | 95% CI: {row['interval'] : ^12} | "
               f"repetition_openai: {row['repetition_openai'] : ^5} | "
               f"repetitions: {row['repetitions'] : ^5} | "
+              f"errors: {row['errors'] : ^5} | "
               f"average #tokens: {int(row['avg_tokens']) : ^5} | "
               f"ru: {row['ru']}")
 
