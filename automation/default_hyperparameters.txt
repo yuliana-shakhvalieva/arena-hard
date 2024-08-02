@@ -1,0 +1,14 @@
+vllm_port = 8880
+hf_parallel = 1
+
+bench_name = arena-hard-v0.1
+judge_model = gpt-4o
+baseline_model = gpt-4-0613
+
+gen_answer_temperature = 0.0
+gen_answer_max_tokens = 4096
+gen_answer_num_choices = 1
+
+judge_config_temperature = 0
+judge_config_max_tokens = 4096
+
